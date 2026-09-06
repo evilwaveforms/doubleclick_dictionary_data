@@ -19,3 +19,10 @@ target
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+# Dictionary inputs and generated assets
+*.jsonl
+*.jsonl.gz
+*.jsonl.gz.part
+dictionary-dist/
+.wrangler/
