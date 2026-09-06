@@ -1,6 +1,6 @@
 # Double-click Dictionary Data
 
-Builds compact, deterministic dictionary shards from Wiktextract JSONL for the Double-click Dictionary Firefox extension. Output is designed for Cloudflare Workers Static Assets.
+Builds compact, deterministic dictionary shards from Wiktextract JSONL for the [Double-click Dictionary Firefox extension](https://github.com/evilwaveforms/firefox_doubleclick_dictionary). Output is designed for Cloudflare Workers Static Assets.
 
 ## Build
 
