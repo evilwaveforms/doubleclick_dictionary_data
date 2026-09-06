@@ -27,27 +27,43 @@ The input is streamed and partitioned before final shards are assembled. Peak me
 
 The output directory contains:
 
-- `shards/*.json`: hashed lookup shards using schema version 2.
-- `metadata.json`: source, language, shard and entry metadata.
-- `licenses/wiktionary.txt`: dictionary attribution, license, and modification notice.
+- `v2/shards/*.json`: hashed lookup shards using schema version 2.
+- `v2/metadata.json`: source, language, shard and entry metadata.
+- `v2/licenses/wiktionary.txt`: dictionary attribution, license, and modification notice.
 - `_headers`: cache and CORS headers for Workers Static Assets.
 
-The generator replaces an existing output directory only when it contains its output marker. Raw downloads and generated output are ignored by Git.
+Each incompatible schema gets a stable versioned URL. The generator retains the current schema and the newest older schema until another schema replaces it. It refuses to manage unmarked schema directories or downgrade over a newer schema.
+
+The generator replaces a schema directory only when it contains its output marker. Raw downloads and generated output are ignored by Git.
 
 ## Deploy
 
-Install Wrangler without adding it as a project dependency, authenticate, and deploy:
+Test the processor, deploy the generated assets, and verify the schema URL:
 
 ```sh
+cargo test
 npx wrangler login
 npx wrangler deploy
+curl --fail https://doubleclick-dictionary-data.evilwaveforms.workers.dev/v2/metadata.json
 ```
 
-Add the production custom domain in Cloudflare after the first deployment.
+Wrangler login is only needed when the local session is not already authenticated. Add the production custom domain in Cloudflare after the first deployment. Configure the extension with the schema URL, such as `https://example.workers.dev/v2`, rather than the deployment root.
+
+For an ordinary dictionary refresh, keep `SCHEMA_VERSION` unchanged, run `scripts/update-dictionary.sh` with the new source date, and repeat the commands above.
+
+For an incompatible format change:
+
+1. Increment `SCHEMA_VERSION` in `src/pipeline.rs`.
+2. Generate and test the dictionary.
+3. Deploy the data and verify the new versioned metadata URL.
+4. Update the extension's schema version and dictionary URL.
+5. Test and release the extension.
+
+The previous schema remains deployed for extension installations that have not updated yet. When another schema is generated later, the generator keeps the two newest schemas and removes older generated schema directories before deployment.
 
 ## Lookup contract
 
-The extension normalizes a lookup as `<language>:<word>`, applies 32-bit FNV-1a and masks the result by `shardCount - 1`. For 8192 shards, `en:hello` is in `shards/0268.json`.
+The extension normalizes a lookup as `<language>:<word>`, applies 32-bit FNV-1a and masks the result by `shardCount - 1`. For 8192 shards, `en:hello` is in `v2/shards/0268.json`.
 
 Each shard has this shape:
 

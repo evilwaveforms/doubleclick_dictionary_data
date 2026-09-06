@@ -1,6 +1,7 @@
 {
   "name": "doubleclick-dictionary-data",
   "compatibility_date": "2026-09-06",
+  "preview_urls": false,
   "assets": {
     "directory": "./dictionary-dist",
     "html_handling": "none"
