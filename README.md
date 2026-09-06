@@ -27,7 +27,7 @@ The input is streamed and partitioned before final shards are assembled. Peak me
 
 The output directory contains:
 
-- `shards/*.json`: hashed lookup shards using schema version 1.
+- `shards/*.json`: hashed lookup shards using schema version 2.
 - `metadata.json`: source, language, shard and entry metadata.
 - `licenses/wiktionary.txt`: dictionary attribution, license, and modification notice.
 - `_headers`: cache and CORS headers for Workers Static Assets.
@@ -53,22 +53,26 @@ Each shard has this shape:
 
 ```json
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "entries": {
-    "en:hello": {
-      "word": "hello",
-      "phonetic": "/həˈləʊ/",
-      "sourceUrl": "https://en.wiktionary.org/wiki/hello",
-      "meanings": [
-        {
-          "partOfSpeech": "interjection",
-          "definitions": [{ "text": "A greeting." }]
-        }
-      ]
-    }
+    "en:hello": [
+      {
+        "word": "hello",
+        "phonetic": "/həˈləʊ/",
+        "sourceUrl": "https://en.wiktionary.org/wiki/hello",
+        "meanings": [
+          {
+            "partOfSpeech": "interjection",
+            "definitions": [{ "text": "A greeting." }]
+          }
+        ]
+      }
+    ]
   }
 }
 ```
+
+Entries sharing a case-insensitive lookup key remain separate variants in the same shard. Clients should prefer an exact spelling match, then the lowercase variant, then the first available variant.
 
 ## License
 

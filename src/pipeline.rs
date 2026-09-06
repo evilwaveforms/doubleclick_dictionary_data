@@ -10,7 +10,7 @@ use crate::cli::Config;
 use crate::model::{Definition, DictionaryEntry, EntryFragment, Meaning, RawEntry};
 use crate::normalize::{lookup_key, shard_index};
 
-const SCHEMA_VERSION: u32 = 1;
+const SCHEMA_VERSION: u32 = 2;
 const PARTITION_LIMIT: usize = 256;
 const MAX_MEANINGS: usize = 6;
 const MAX_DEFINITIONS_PER_MEANING: usize = 4;
@@ -27,7 +27,7 @@ pub struct BuildStats {
 #[serde(rename_all = "camelCase")]
 struct ShardDocument<'a> {
     schema_version: u32,
-    entries: &'a BTreeMap<String, DictionaryEntry>,
+    entries: &'a BTreeMap<String, Vec<DictionaryEntry>>,
 }
 
 #[derive(Serialize)]
@@ -114,7 +114,7 @@ fn build_staged(config: &Config, staging: &Path) -> Result<BuildStats, String> {
     for partition in 0..partition_count {
         let grouped = read_partition(&work.join(format!("{partition:03}.jsonl")))?;
         for (shard, entries) in grouped {
-            entry_count += entries.len();
+            entry_count += entries.values().map(Vec::len).sum::<usize>();
             write_json(
                 &shards_directory.join(format!("{shard:04x}.json")),
                 &ShardDocument { schema_version: SCHEMA_VERSION, entries: &entries },
@@ -206,9 +206,9 @@ fn create_partitions(directory: &Path, count: usize) -> Result<Vec<BufWriter<Fil
         .collect()
 }
 
-fn read_partition(path: &Path) -> Result<BTreeMap<usize, BTreeMap<String, DictionaryEntry>>, String> {
+fn read_partition(path: &Path) -> Result<BTreeMap<usize, BTreeMap<String, Vec<DictionaryEntry>>>, String> {
     let file = File::open(path).map_err(|error| path_error("open partition", path, error))?;
-    let mut grouped = BTreeMap::<usize, BTreeMap<String, DictionaryEntry>>::new();
+    let mut grouped = BTreeMap::<usize, BTreeMap<String, Vec<DictionaryEntry>>>::new();
 
     for line in BufReader::new(file).lines() {
         let line = line.map_err(|error| path_error("read partition", path, error))?;
@@ -221,13 +221,17 @@ fn read_partition(path: &Path) -> Result<BTreeMap<usize, BTreeMap<String, Dictio
     Ok(grouped)
 }
 
-fn merge_fragment(entries: &mut BTreeMap<String, DictionaryEntry>, fragment: EntryFragment) {
-    let entry = entries.entry(fragment.key).or_insert_with(|| DictionaryEntry {
-        word: fragment.word,
-        phonetic: fragment.phonetic.clone(),
-        source_url: fragment.source_url,
-        meanings: Vec::new(),
-    });
+fn merge_fragment(entries: &mut BTreeMap<String, Vec<DictionaryEntry>>, fragment: EntryFragment) {
+    let variants = entries.entry(fragment.key).or_default();
+    let Some(entry) = variants.iter_mut().find(|entry| entry.word == fragment.word) else {
+        variants.push(DictionaryEntry {
+            word: fragment.word,
+            phonetic: fragment.phonetic,
+            source_url: fragment.source_url,
+            meanings: vec![fragment.meaning],
+        });
+        return;
+    };
     entry.phonetic = entry.phonetic.take().or(fragment.phonetic);
 
     if let Some(meaning) = entry
@@ -366,7 +370,7 @@ mod tests {
         };
 
         let stats = build(&config).unwrap();
-        assert_eq!(stats.entries, 1);
+        assert_eq!(stats.entries, 2);
         assert_eq!(stats.accepted_records, 2);
         assert_eq!(stats.skipped_records, 2);
 
@@ -375,11 +379,16 @@ mod tests {
             &fs::read(output.join(format!("shards/{shard:04x}.json"))).unwrap(),
         )
         .unwrap();
-        assert_eq!(document["schemaVersion"], 1);
-        assert_eq!(document["entries"]["en:hello"]["meanings"].as_array().unwrap().len(), 2);
-        assert_eq!(document["entries"]["en:hello"]["phonetic"], "/həˈləʊ/");
-        assert_eq!(document["entries"]["en:hello"]["meanings"][0]["definitions"][0]["example"], "Hello there.");
-        assert_eq!(document["entries"]["en:hello"]["sourceUrl"], "https://en.wiktionary.org/wiki/Hello");
+        assert_eq!(document["schemaVersion"], 2);
+        let variants = document["entries"]["en:hello"].as_array().unwrap();
+        assert_eq!(variants.len(), 2);
+        assert_eq!(variants[0]["word"], "Hello");
+        assert_eq!(variants[0]["meanings"].as_array().unwrap().len(), 1);
+        assert_eq!(variants[0]["phonetic"], "/həˈləʊ/");
+        assert_eq!(variants[0]["meanings"][0]["definitions"][0]["example"], "Hello there.");
+        assert_eq!(variants[0]["sourceUrl"], "https://en.wiktionary.org/wiki/Hello");
+        assert_eq!(variants[1]["word"], "hello");
+        assert_eq!(variants[1]["meanings"].as_array().unwrap().len(), 1);
 
         let metadata: Value = serde_json::from_slice(&fs::read(output.join("metadata.json")).unwrap()).unwrap();
         assert_eq!(metadata["license"], "CC BY-SA 4.0");
