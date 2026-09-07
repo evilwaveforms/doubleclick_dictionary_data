@@ -4,7 +4,7 @@ Builds compact, deterministic dictionary shards from Wiktextract JSONL for the [
 
 ## Build
 
-Download the current raw Wiktextract dataset and build the English dictionary. Pass the enwiktionary dump date shown on the [Kaikki raw data page](https://kaikki.org/dictionary/rawdata.html), not the download date:
+Download the current raw Wiktextract dataset and build English, Finnish, Swedish, German, French, and Spanish entries. Pass the enwiktionary dump date shown on the [Kaikki raw data page](https://kaikki.org/dictionary/rawdata.html), not the download date:
 
 ```sh
 ./scripts/update-dictionary.sh 2026-08-05
@@ -20,6 +20,11 @@ target/release/doubleclick-dictionary-data \
   --input raw-wiktextract-data.jsonl.gz \
   --output dictionary-dist \
   --language en \
+  --language fi \
+  --language sv \
+  --language de \
+  --language fr \
+  --language es \
   --source-date 2026-08-05
 ```
 

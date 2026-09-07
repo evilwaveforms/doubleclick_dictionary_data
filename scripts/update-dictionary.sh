@@ -31,4 +31,9 @@ cargo run --release -- \
   --input "$input_path" \
   --output "$repository_directory/dictionary-dist" \
   --language en \
+  --language fi \
+  --language sv \
+  --language de \
+  --language fr \
+  --language es \
   --source-date "$source_date"
