@@ -168,12 +168,12 @@ fn to_fragment(raw: RawEntry, config: &Config) -> Option<EntryFragment> {
         .senses
         .into_iter()
         .filter_map(|sense| {
-            let text = sense.glosses.into_iter().find(|gloss| !gloss.trim().is_empty())?;
+            let text = sense.glosses.into_iter().rev().find(|gloss| usable_text(gloss))?;
             let example = sense.examples.into_iter().find_map(|example| {
                 if example.kind.as_deref() == Some("quotation") || example.reference.is_some() {
                     None
                 } else {
-                    example.text
+                    example.text.filter(|text| usable_text(text))
                 }
             });
             Some(Definition { text, example })
@@ -195,6 +195,31 @@ fn to_fragment(raw: RawEntry, config: &Config) -> Option<EntryFragment> {
         source_url,
         meaning: Meaning { part_of_speech: raw.pos, definitions },
     })
+}
+
+fn usable_text(text: &str) -> bool {
+    !text.trim().is_empty() && !has_numeric_entity_fragment(text)
+}
+
+fn has_numeric_entity_fragment(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] != b'#' {
+            index += 1;
+            continue;
+        }
+
+        let mut end = index + 1;
+        while end < bytes.len() && bytes[end].is_ascii_digit() {
+            end += 1;
+        }
+        if end > index + 1 && bytes.get(end) == Some(&b';') {
+            return true;
+        }
+        index = end;
+    }
+    false
 }
 
 fn create_partitions(directory: &Path, count: usize) -> Result<Vec<BufWriter<File>>, String> {
@@ -438,7 +463,7 @@ mod tests {
         fs::write(
             &input,
             concat!(
-                r#"{"word":"Hello","lang_code":"en","pos":"interjection","senses":[{"glosses":["A greeting."],"examples":[{"text":"Quoted hello.","type":"quotation","ref":"Example Author"},{"text":"Hello there.","type":"example"}]}],"sounds":[{"ipa":"/həˈləʊ/","mp3_url":"https://audio.example/hello.mp3"}]}"#,
+                r#"{"word":"Hello","lang_code":"en","pos":"interjection","senses":[{"glosses":["A greeting.","A spoken greeting."],"examples":[{"text":"Quoted hello.","type":"quotation","ref":"Example Author"},{"text":"Broken #123;example#125;.","type":"example"},{"text":"Hello there.","type":"example"}]}],"sounds":[{"ipa":"/həˈləʊ/","mp3_url":"https://audio.example/hello.mp3"}]}"#,
                 "\n",
                 r#"{"word":"hello","lang_code":"en","pos":"noun","senses":[{"glosses":["An utterance of hello."]}]}"#,
                 "\n",
@@ -474,6 +499,7 @@ mod tests {
         assert_eq!(variants[0]["word"], "Hello");
         assert_eq!(variants[0]["meanings"].as_array().unwrap().len(), 1);
         assert_eq!(variants[0]["phonetic"], "/həˈləʊ/");
+        assert_eq!(variants[0]["meanings"][0]["definitions"][0]["text"], "A spoken greeting.");
         assert_eq!(variants[0]["meanings"][0]["definitions"][0]["example"], "Hello there.");
         assert_eq!(variants[0]["sourceUrl"], "https://en.wiktionary.org/wiki/Hello");
         assert_eq!(variants[1]["word"], "hello");
